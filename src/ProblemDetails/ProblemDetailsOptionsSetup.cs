@@ -35,6 +35,12 @@ namespace Hellang.Middleware.ProblemDetails
             {
                 options.IsProblem = IsProblem;
             }
+
+            if (options.ContentType.Count == 0)
+            {
+                options.ContentType.Add("application/problem+json");
+                options.ContentType.Add("application/problem+xml");
+            }
         }
 
         private static bool IncludeExceptionDetails(HttpContext context)
