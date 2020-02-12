@@ -1,4 +1,4 @@
-﻿using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection;
 
 #if (NETCOREAPP2_1 || NETCOREAPP2_2)
 using Newtonsoft.Json;
@@ -11,9 +11,13 @@ namespace ProblemDetails.Tests.Helpers
         public static IMvcCoreBuilder AddJson(this IMvcCoreBuilder mvc)
         {
 #if (NETCOREAPP2_1 || NETCOREAPP2_2)
-            return mvc.AddJsonFormatters(json => json.NullValueHandling = NullValueHandling.Ignore);
+            return mvc.AddJsonFormatters(json => json.NullValueHandling = NullValueHandling.Ignore)
+                        .AddXmlSerializerFormatters()
+                        .AddXmlDataContractSerializerFormatters();
 #else
-            return mvc.AddJsonOptions(json => { json.JsonSerializerOptions.IgnoreNullValues = true; });
+            return mvc.AddJsonOptions(json => { json.JsonSerializerOptions.IgnoreNullValues = true; })
+                      .AddXmlSerializerFormatters()
+                      .AddXmlDataContractSerializerFormatters();
 #endif
         }
     }

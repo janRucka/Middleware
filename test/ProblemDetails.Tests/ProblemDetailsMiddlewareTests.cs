@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Linq;
 using System.Net;
 using System.Net.Http;
@@ -14,6 +14,8 @@ using Microsoft.Net.Http.Headers;
 using ProblemDetails.Tests.Helpers;
 using Xunit;
 using MvcProblemDetails = Microsoft.AspNetCore.Mvc.ProblemDetails;
+using Microsoft.AspNetCore.Mvc.Formatters;
+using System.Text;
 
 #if (NETCOREAPP2_1 || NETCOREAPP2_2)
 using Environments = Microsoft.Extensions.Hosting.EnvironmentName;
@@ -58,6 +60,63 @@ namespace ProblemDetails.Tests
             Assert.Equal(HttpStatusCode.InternalServerError, response.StatusCode);
             await AssertIsProblemDetailsResponse(response);
         }
+
+        [Fact]
+        public async Task ContentType_Default_Response()
+        {
+            using var client = CreateClient(handler: ResponseThrows());
+            client.DefaultRequestHeaders.Accept.Clear();
+
+            var response = await client.GetAsync(string.Empty);
+
+            Assert.Equal("application/problem+json", response.Content.Headers.ContentType.MediaType);
+        }
+
+        [Theory]
+        [InlineData("application/json", "application/problem+json")]
+        [InlineData("application/problem+xml", "application/problem+xml")]
+        [InlineData("application/csv", "application/problem+json")]
+        public async Task ContentType_Default_Options(string requestAcceptContentType, string responseContentType)
+        {
+            void MapNotImplementException(ProblemDetailsOptions options)
+            {
+                options.ContentType.Clear();
+                options.ContentType.Add("application/xml");
+                options.ContentType.Add("application/problem+xml");
+            }
+
+
+            using var client = CreateClient(handler: ResponseThrows(), MapNotImplementException);
+            client.DefaultRequestHeaders.Accept.Clear();
+            client.DefaultRequestHeaders.Accept.ParseAdd(requestAcceptContentType);
+            client.DefaultRequestHeaders.Accept.ParseAdd("application/xml");
+
+            var response = await client.GetAsync(string.Empty);
+
+            Assert.Equal(responseContentType, response.Content.Headers.ContentType.MediaType);
+        }
+
+        private static RequestDelegate aaa()
+        {
+            return context =>
+            {
+                var bytes = Encoding.UTF8.GetBytes("Foo Bar");
+                return context.Response.Body.WriteAsync(bytes).AsTask();
+                //return Task.FromResult("test");
+            };
+        }
+
+        [Fact]
+        public async Task Options_ContentType()
+        {
+            using var client = CreateClient(handler: ResponseThrows());
+
+            var response = await client.GetAsync(string.Empty);
+
+            Assert.Equal(HttpStatusCode.InternalServerError, response.StatusCode);
+            await AssertIsProblemDetailsResponse(response);
+        }
+        
 
         [Fact]
         public async Task ProblemDetailsException_IsHandled()
@@ -300,7 +359,11 @@ namespace ProblemDetails.Tests
                     .AddSingleton<ILogger<ProblemDetailsMiddleware>>(Logger)
                     .AddCors()
                     .AddProblemDetails(configureOptions)
-                    .AddMvcCore()
+                    .AddMvcCore(options => {
+                        options.InputFormatters.Add(new XmlSerializerInputFormatter(options));
+                        options.OutputFormatters.Add(new XmlSerializerOutputFormatter());
+                        options.ReturnHttpNotAcceptable = false;
+                    })
                     .AddJson())
                 .Configure(x => x
                     .UseCors(y => y.AllowAnyOrigin())
@@ -312,7 +375,7 @@ namespace ProblemDetails.Tests
             var client = server.CreateClient();
 
             client.DefaultRequestHeaders.Accept.Clear();
-            client.DefaultRequestHeaders.Accept.ParseAdd("application/problem+json");
+            //client.DefaultRequestHeaders.Accept.ParseAdd("application/problem+json");
 
             return client;
         }
