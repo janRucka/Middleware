@@ -321,6 +321,52 @@ namespace ProblemDetails.Tests
             Assert.Equal(HttpStatusCode.InternalServerError, response.StatusCode);
         }
 
+        [Fact]
+        public async Task Response_In_Xml_Working()
+        {
+            // mapping with 'Microsoft.AspNetCore.Mvc.ProblemDetails' - Ok
+            using var client = CreateClient(handler: ResponseThrows(), options => options.Map<Exception>(_ => new MvcProblemDetails()));
+            client.DefaultRequestHeaders.Accept.Clear();
+            client.DefaultRequestHeaders.Accept.ParseAdd("application/xml");
+
+            var response = await client.GetAsync(string.Empty);
+            Assert.Equal("application/problem+xml", response.Content.Headers.ContentType.MediaType);
+        }
+
+        [Fact]
+        public async Task Response_In_Xml_Not_Working()
+        {
+            // no exception mapping which results in 'Hellang.Middleware.ProblemDetails.DeveloperProblemDetails' type
+            using var client = CreateClient(handler: ResponseThrows());
+            client.DefaultRequestHeaders.Accept.Clear();
+            client.DefaultRequestHeaders.Accept.ParseAdd("application/xml");
+
+            var response = await client.GetAsync(string.Empty);
+
+            // JSON!?
+            Assert.Equal("application/problem+xml", response.Content.Headers.ContentType.MediaType);
+        }
+
+        [Fact]
+        public async Task Response_In_Xml_Not_Working2()
+        {
+            void MapNotImplementException(ProblemDetailsOptions options)
+            {
+                // mapping with ExceptionProblemDetails which results in 'Hellang.Middleware.ProblemDetails.DeveloperProblemDetails' type
+                options.Map<Exception>(ex =>
+                    new ExceptionProblemDetails(ex) { Status = StatusCodes.Status501NotImplemented });
+            }
+
+            using var client = CreateClient(handler: ResponseThrows(), MapNotImplementException);
+            client.DefaultRequestHeaders.Accept.Clear();
+            client.DefaultRequestHeaders.Accept.ParseAdd("application/xml");
+
+            var response = await client.GetAsync(string.Empty);
+
+            // JSON!?
+            Assert.Equal("application/problem+xml", response.Content.Headers.ContentType.MediaType);
+        }
+
         private static async Task AssertIsProblemDetailsResponse(HttpResponseMessage response)
         {
             Assert.NotEmpty(await response.Content.ReadAsStringAsync());
@@ -346,7 +392,7 @@ namespace ProblemDetails.Tests
                     .AddCors()
                     .AddProblemDetails(configureOptions)
                     .AddMvcCore()
-                    .AddJson())
+                    .AddFormatters())
                 .Configure(x => x
                     .UseCors(y => y.AllowAnyOrigin())
                     .UseProblemDetails()
